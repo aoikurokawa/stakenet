@@ -4,7 +4,7 @@ use anchor_lang::{
 };
 use validator_history_vote_state::VoteStateVersions;
 
-use crate::{state::ValidatorHistory, utils::cast_epoch};
+use crate::{events::ValidatorHistoryUpdated, state::ValidatorHistory, utils::cast_epoch};
 
 #[derive(Accounts)]
 pub struct CopyVoteAccount<'info> {
@@ -33,6 +33,11 @@ pub fn handle_copy_vote_account(ctx: Context<CopyVoteAccount>) -> Result<()> {
     let epoch_credits = VoteStateVersions::deserialize_epoch_credits(&ctx.accounts.vote_account)?;
     validator_history_account.insert_missing_entries(&epoch_credits)?;
     validator_history_account.set_epoch_credits(&epoch_credits)?;
+
+    emit!(ValidatorHistoryUpdated {
+        epoch: Clock::get()?.epoch,
+        vote_account: validator_history_account.vote_account
+    });
 
     Ok(())
 }

@@ -1,5 +1,6 @@
 use crate::{
     errors::ValidatorHistoryError,
+    events::ValidatorHistoryUpdated,
     state::{Config, ValidatorHistory},
     utils::cast_epoch,
 };
@@ -48,6 +49,10 @@ pub fn handle_update_stake_history(
     let epoch = cast_epoch(epoch)?;
 
     validator_history_account.set_stake(epoch, lamports, rank, is_superminority)?;
+    emit!(ValidatorHistoryUpdated {
+        epoch: Clock::get()?.epoch,
+        vote_account: validator_history_account.vote_account
+    });
 
     Ok(())
 }

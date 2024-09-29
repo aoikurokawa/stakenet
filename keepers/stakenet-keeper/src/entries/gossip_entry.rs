@@ -71,6 +71,8 @@ impl GossipEntry {
                 instructions: solana_program::sysvar::instructions::id(),
                 config: self.config,
                 oracle_authority: self.signer,
+                event_authority: self.signer,
+                program: validator_history::id(),
             }
             .to_account_metas(None),
             data: validator_history::instruction::CopyGossipContactInfo {}.data(),

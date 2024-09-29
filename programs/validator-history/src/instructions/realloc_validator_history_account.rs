@@ -1,5 +1,6 @@
 use crate::{
     constants::MAX_ALLOC_BYTES,
+    events::ValidatorHistoryUpdated,
     state::{Config, ValidatorHistory, ValidatorHistoryEntry, ValidatorHistoryVersion},
 };
 use anchor_lang::{prelude::*, solana_program::vote};
@@ -69,6 +70,10 @@ pub fn handle_realloc_validator_history_account(
                 .push(ValidatorHistoryEntry::default());
         }
         validator_history_account.history.is_empty = 1;
+        emit!(ValidatorHistoryUpdated {
+            epoch: Clock::get()?.epoch,
+            vote_account: validator_history_account.vote_account
+        });
     }
 
     Ok(())

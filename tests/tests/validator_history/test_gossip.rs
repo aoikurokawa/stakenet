@@ -43,6 +43,8 @@ fn create_gossip_tx(fixture: &TestFixture, crds_data: &CrdsData) -> Transaction 
             instructions: anchor_lang::solana_program::sysvar::instructions::id(),
             config: fixture.validator_history_config,
             oracle_authority: fixture.keypair.pubkey(),
+            event_authority: fixture.keypair.pubkey(),
+            program: validator_history::id(),
         }
         .to_account_metas(None),
         data: validator_history::instruction::CopyGossipContactInfo {}.data(),
@@ -148,6 +150,8 @@ async fn test_copy_legacy_version() {
             instructions: anchor_lang::solana_program::sysvar::instructions::id(),
             config: fixture.validator_history_config,
             oracle_authority: fixture.keypair.pubkey(),
+            event_authority: fixture.keypair.pubkey(),
+            program: validator_history::id(),
         }
         .to_account_metas(None),
         data: validator_history::instruction::CopyGossipContactInfo {}.data(),
@@ -233,6 +237,8 @@ async fn test_gossip_wrong_signer() {
             instructions: anchor_lang::solana_program::sysvar::instructions::id(),
             config: fixture.validator_history_config,
             oracle_authority: fixture.keypair.pubkey(),
+            event_authority: fixture.keypair.pubkey(),
+            program: validator_history::id(),
         }
         .to_account_metas(None),
         data: validator_history::instruction::CopyGossipContactInfo {}.data(),
@@ -291,6 +297,8 @@ async fn test_gossip_missing_sigverify_instruction() {
             instructions: anchor_lang::solana_program::sysvar::instructions::id(),
             config: fixture.validator_history_config,
             oracle_authority: fixture.keypair.pubkey(),
+            event_authority: fixture.keypair.pubkey(),
+            program: validator_history::id(),
         }
         .to_account_metas(None),
         data: validator_history::instruction::CopyGossipContactInfo {}.data(),
@@ -510,6 +518,8 @@ async fn test_fake_offsets() {
             instructions: anchor_lang::solana_program::sysvar::instructions::id(),
             config: fixture.validator_history_config,
             oracle_authority: fixture.keypair.pubkey(),
+            event_authority: fixture.keypair.pubkey(),
+            program: validator_history::id(),
         }
         .to_account_metas(None),
         data: validator_history::instruction::CopyGossipContactInfo {}.data(),

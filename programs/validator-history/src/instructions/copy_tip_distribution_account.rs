@@ -2,6 +2,7 @@ use anchor_lang::{prelude::*, solana_program::vote};
 
 use crate::{
     errors::ValidatorHistoryError,
+    events::ValidatorHistoryUpdated,
     state::{Config, ValidatorHistory},
     utils::{cast_epoch, fixed_point_sol},
     ValidatorHistoryEntry,
@@ -73,6 +74,11 @@ pub fn handle_copy_tip_distribution_account(
     };
 
     validator_history_account.set_mev_commission(epoch, mev_commission_bps, mev_earned)?;
+
+    emit!(ValidatorHistoryUpdated {
+        epoch: Clock::get()?.epoch,
+        vote_account: validator_history_account.vote_account
+    });
 
     Ok(())
 }

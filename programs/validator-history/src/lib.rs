@@ -4,6 +4,7 @@ mod allocator;
 pub mod constants;
 pub mod crds_value;
 pub mod errors;
+mod events;
 pub mod instructions;
 pub mod serde_varint;
 pub mod state;

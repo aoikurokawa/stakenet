@@ -5,8 +5,8 @@ use anchor_lang::{
 use bytemuck::{from_bytes, Pod, Zeroable};
 
 use crate::{
-    crds_value::CrdsData, errors::ValidatorHistoryError, state::ValidatorHistory,
-    utils::cast_epoch, Config,
+    crds_value::CrdsData, errors::ValidatorHistoryError, events::ValidatorHistoryUpdated,
+    state::ValidatorHistory, utils::cast_epoch, Config,
 };
 use validator_history_vote_state::VoteStateVersions;
 
@@ -30,6 +30,7 @@ pub const SIGNATURE_OFFSETS_SERIALIZED_SIZE: usize = 14;
 pub const SIGNATURE_OFFSETS_START: usize = 2;
 pub const DATA_START: usize = SIGNATURE_OFFSETS_SERIALIZED_SIZE + SIGNATURE_OFFSETS_START;
 
+#[event_cpi]
 #[derive(Accounts)]
 pub struct CopyGossipContactInfo<'info> {
     #[account(
@@ -125,6 +126,10 @@ pub fn handle_copy_gossip_contact_info(ctx: Context<CopyGossipContactInfo>) -> R
         return Err(ValidatorHistoryError::GossipDataInFuture.into());
     }
 
+    let event = ValidatorHistoryUpdated {
+        epoch: Clock::get()?.epoch,
+        vote_account: validator_history_account.vote_account,
+    };
     // Set gossip values
     match crds_data {
         CrdsData::LegacyContactInfo(legacy_contact_info) => {
@@ -133,15 +138,19 @@ pub fn handle_copy_gossip_contact_info(ctx: Context<CopyGossipContactInfo>) -> R
                 &legacy_contact_info,
                 last_signed_ts,
             )?;
+            emit_cpi!(event);
         }
         CrdsData::ContactInfo(contact_info) => {
             validator_history_account.set_contact_info(epoch, &contact_info, last_signed_ts)?;
+            emit_cpi!(event);
         }
         CrdsData::Version(version) => {
             validator_history_account.set_version(epoch, &version, last_signed_ts)?;
+            emit_cpi!(event);
         }
         CrdsData::LegacyVersion(legacy_version) => {
             validator_history_account.set_legacy_version(epoch, &legacy_version, last_signed_ts)?;
+            emit_cpi!(event);
         }
         _ => {
             return Err(ValidatorHistoryError::GossipDataInvalid.into());

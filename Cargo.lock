@@ -7087,6 +7087,7 @@ dependencies = [
  "solana-metrics",
  "solana-program",
  "solana-sdk",
+ "solana-transaction-status",
  "thiserror",
  "tokio",
  "validator-history",

@@ -8,8 +8,8 @@ pub mod router;
 
 pub type Result<T> = std::result::Result<T, ApiError>;
 
-#[derive(Serialize, Deserialize)]
-pub(crate) struct ValidatorHistoryResponse {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidatorHistoryResponse {
     /// Cannot be enum due to Pod and Zeroable trait limitations
     pub(crate) struct_version: u32,
 
@@ -41,8 +41,8 @@ impl ValidatorHistoryResponse {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub(crate) struct ValidatorHistoryEntryResponse {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidatorHistoryEntryResponse {
     pub(crate) activated_stake_lamports: u64,
     pub(crate) epoch: u16,
 
@@ -93,7 +93,7 @@ impl ValidatorHistoryEntryResponse {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ClientVersionResponse {
     pub(crate) major: u8,
     pub(crate) minor: u8,

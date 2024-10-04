@@ -1,7 +1,6 @@
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
 use clap::Parser;
-use jito_stakenet_api::ValidatorHistoryResponse;
 use moka::future::Cache;
 use solana_program::pubkey::Pubkey;
 use solana_rpc_client::nonblocking::rpc_client::RpcClient;
@@ -41,12 +40,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let rpc_client = RpcClient::new(args.json_rpc_url.clone());
     info!("started rpc client at {}", args.json_rpc_url);
 
-    let cache: Cache<Pubkey, ValidatorHistoryResponse> = Cache::new(u64::MAX);
 
     let state = Arc::new(jito_stakenet_api::router::RouterState {
         validator_history_program_id: args.validator_history_program_id,
         rpc_client,
-        cache,
     });
 
     let app = jito_stakenet_api::router::get_routes(state);

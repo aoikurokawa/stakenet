@@ -40,38 +40,48 @@ pub(crate) async fn get_all_validator_histories(
     let vote_account = Pubkey::from_str(&vote_account)?;
     let history_account =
         get_validator_history_address(&vote_account, &state.validator_history_program_id);
-    let account = state.rpc_client.get_account(&history_account).await?;
-    let validator_history = ValidatorHistory::try_deserialize(&mut account.data.as_slice())
-        .map_err(|e| {
-            warn!("error deserializing ValidatorHistory: {:?}", e);
-            ApiError::ValidatorHistoryError("Error parsing ValidatorHistory".to_string())
-        })?;
 
-    let history_entries: Vec<ValidatorHistoryEntryResponse> = match epoch_query.epoch {
-        Some(epoch) => validator_history
-            .history
-            .arr
-            .iter()
-            .filter_map(|entry| {
-                if epoch == entry.epoch {
-                    Some(ValidatorHistoryEntryResponse::from_validator_history_entry(
-                        entry,
-                    ))
-                } else {
-                    None
-                }
-            })
-            .collect(),
-        None => validator_history
-            .history
-            .arr
-            .iter()
-            .map(ValidatorHistoryEntryResponse::from_validator_history_entry)
-            .collect(),
-    };
+    match state.cache.get(&history_account).await {
+        Some(history) => Ok(Json(history)),
+        None => {
+            let account = state.rpc_client.get_account(&history_account).await?;
+            let validator_history = ValidatorHistory::try_deserialize(&mut account.data.as_slice())
+                .map_err(|e| {
+                    warn!("error deserializing ValidatorHistory: {:?}", e);
+                    ApiError::ValidatorHistoryError("Error parsing ValidatorHistory".to_string())
+                })?;
 
-    let history =
-        ValidatorHistoryResponse::from_validator_history(validator_history, history_entries);
+            let history_entries: Vec<ValidatorHistoryEntryResponse> = match epoch_query.epoch {
+                Some(epoch) => validator_history
+                    .history
+                    .arr
+                    .iter()
+                    .filter_map(|entry| {
+                        if epoch == entry.epoch {
+                            Some(ValidatorHistoryEntryResponse::from_validator_history_entry(
+                                entry,
+                            ))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect(),
+                None => validator_history
+                    .history
+                    .arr
+                    .iter()
+                    .map(ValidatorHistoryEntryResponse::from_validator_history_entry)
+                    .collect(),
+            };
 
-    Ok(Json(history))
+            let history = ValidatorHistoryResponse::from_validator_history(
+                validator_history,
+                history_entries,
+            );
+
+            state.cache.insert(history_account, history.clone()).await;
+
+            Ok(Json(history))
+        }
+    }
 }

@@ -7,6 +7,7 @@ use axum::{
     body::Body, error_handling::HandleErrorLayer, response::IntoResponse, routing::get, Router,
 };
 use http::StatusCode;
+use moka::future::Cache;
 use solana_program::pubkey::Pubkey;
 use solana_rpc_client::nonblocking::rpc_client::RpcClient;
 use tower::{
@@ -19,9 +20,12 @@ use tower_http::{
 };
 use tracing::{info, instrument, Span};
 
+use crate::ValidatorHistoryResponse;
+
 pub struct RouterState {
     pub validator_history_program_id: Pubkey,
     pub rpc_client: RpcClient,
+    pub cache: Cache<Pubkey, ValidatorHistoryResponse>,
 }
 
 impl std::fmt::Debug for RouterState {

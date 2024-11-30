@@ -1,0 +1,12 @@
+{
+  "name": "stakenet",
+  "version": "0.0.1",
+  "dependencies": {
+    "@codama/nodes-from-anchor": "^1.0.1",
+    "@codama/renderers": "^1.0.4",
+    "codama": "^1.1.0"
+  },
+  "scripts": {
+    "generate-clients": "node script/generate-clients.js"
+  }
+}

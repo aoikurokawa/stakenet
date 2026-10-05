@@ -64,8 +64,5 @@ tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 uriparse = "0.6.4"
 validator-history = { path = "programs/validator-history", version = "0.2.1", features = ["no-entrypoint"] }
 
-[patch.crates-io]
-home = { git = "https://github.com/rust-lang/cargo", tag = "0.78.0" }
-
 [profile.release]
 overflow-checks = true

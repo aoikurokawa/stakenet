@@ -28,6 +28,13 @@ type UnixTimestamp = i64;
 pub const MAX_LOCKOUT_HISTORY: usize = 31;
 pub const INITIAL_LOCKOUT: usize = 2;
 
+/// Marker that Alpenglow pushes into a vote account's `epoch_credits` during the
+/// tower -> alpenglow migration epoch. It is not a real epoch credit entry, and it stays in the
+/// vote account until it ages out of the vote program's 64 entry credit history.
+///
+/// See `votor-messages/src/migration.rs` in jito-solana.
+pub const AG_MIGRATION_EPOCH_CREDIT: (Epoch, u64, u64) = (Epoch::MAX, u64::MAX, u64::MAX);
+
 #[derive(Clone, Serialize, Deserialize, Default, Debug, PartialEq, Eq)]
 pub struct Lockout {
     pub slot: Slot,
@@ -261,7 +268,9 @@ impl VoteStateVersions {
                     return Err(ErrorCode::VoteAccountDataNotValid.into());
                 }
 
-                let commission = inflation_rewards_commission_bps / Self::BPS_PER_PERCENT;
+                // Round up, as RPC does when reporting a bps commission as a percent. Flooring would
+                // let e.g. 499 bps (4.99%) score as 4% and pass a 4% commission cap.
+                let commission = inflation_rewards_commission_bps.div_ceil(Self::BPS_PER_PERCENT);
                 u8::try_from(commission).map_err(|_| ErrorCode::VoteAccountDataNotValid.into())
             }
             _ => Err(ErrorCode::VoteAccountDataNotValid.into()),
@@ -452,8 +461,12 @@ impl VoteStateVersions {
         let epoch_credits_bytes = &bincode_data[(epoch_credits_idx)
             ..(epoch_credits_idx + Self::COLLECTION_LEN_BYTES + epoch_credits_size)];
 
-        bincode::deserialize(epoch_credits_bytes)
-            .map_err(|_| ErrorCode::VoteAccountDataNotValid.into())
+        let mut epoch_credits = bincode::deserialize::<Vec<(Epoch, u64, u64)>>(epoch_credits_bytes)
+            .map_err(|_| ErrorCode::VoteAccountDataNotValid)?;
+
+        epoch_credits.retain(|entry| entry != &AG_MIGRATION_EPOCH_CREDIT);
+
+        Ok(epoch_credits)
     }
 }
 
@@ -461,7 +474,7 @@ impl VoteStateVersions {
 mod tests {
     use crate::{
         AuthorizedVoters, BLSPubkey, BlockTimestamp, CircBuf, Lockout, VoteState0_23_5,
-        VoteStateVersions, MAX_LOCKOUT_HISTORY,
+        VoteStateVersions, AG_MIGRATION_EPOCH_CREDIT, MAX_LOCKOUT_HISTORY,
     };
     #[allow(deprecated)]
     use anchor_lang::{
@@ -733,6 +746,54 @@ mod tests {
     }
 
     #[test]
+    fn test_deserialize_epoch_credits_strips_migration_marker() {
+        let test_epoch_credits: Vec<(Epoch, u64, u64)> = vec![
+            (70, 9, 6),
+            (71, 20, 9),
+            AG_MIGRATION_EPOCH_CREDIT,
+            (71, 35, 20),
+            (72, 50, 35),
+        ];
+        let vote_state_current = VoteStateVersions::Current(Box::new(crate::VoteState {
+            node_pubkey: Pubkey::new_unique(),
+            authorized_withdrawer: Pubkey::new_unique(),
+            inflation_rewards_collector: Pubkey::new_unique(),
+            block_revenue_collector: Pubkey::new_unique(),
+            inflation_rewards_commission_bps: 99,
+            block_revenue_commission_bps: 99,
+            pending_delegator_rewards: 0,
+            bls_pubkey_compressed: Some(BLSPubkey { bytes: [0; 48] }),
+            votes: VecDeque::new(),
+            root_slot: Some(1),
+            authorized_voters: AuthorizedVoters::default(),
+            epoch_credits: test_epoch_credits,
+            last_timestamp: BlockTimestamp::default(),
+        }));
+
+        let mut ser_current = bincode::serialize(&vote_state_current).unwrap();
+        let mut lamports: u64 = 0;
+        let key = Pubkey::new_unique();
+        let owner = vote::program::ID.key();
+        let account_current = AccountInfo::new(
+            &key,
+            false,
+            false,
+            &mut lamports,
+            ser_current.as_mut_slice(),
+            &owner,
+            false,
+            0,
+        );
+
+        let epoch_credits_result =
+            VoteStateVersions::deserialize_epoch_credits(&account_current).unwrap();
+        assert_eq!(
+            epoch_credits_result,
+            vec![(70, 9, 6), (71, 20, 9), (71, 35, 20), (72, 50, 35)]
+        );
+    }
+
+    #[test]
     fn test_deserialize_commission() {
         let vote_state = VoteStateVersions::V1_14_11(Box::new(crate::VoteState1_14_11 {
             node_pubkey: Pubkey::new_unique(),
@@ -919,6 +980,59 @@ mod tests {
             0,
         );
         assert!(VoteStateVersions::deserialize_commission(&account_v4_invalid).is_err());
+    }
+
+    #[test]
+    fn test_deserialize_commission_rounds_bps_up_to_percent() {
+        let key = Pubkey::new_unique();
+        let owner = vote::program::ID.key();
+        let mut lamports = 0;
+
+        for (inflation_rewards_commission_bps, expected_commission) in [
+            (0, 0),
+            (1, 1),
+            (99, 1),
+            (100, 1),
+            (101, 2),
+            (499, 5),
+            (500, 5),
+            (501, 6),
+            (1_099, 11),
+            (9_999, 100),
+            (10_000, 100),
+        ] {
+            let vote_state_v4 = VoteStateVersions::Current(Box::new(crate::VoteState {
+                node_pubkey: Pubkey::new_unique(),
+                authorized_withdrawer: Pubkey::new_unique(),
+                inflation_rewards_collector: Pubkey::new_unique(),
+                block_revenue_collector: Pubkey::new_unique(),
+                inflation_rewards_commission_bps,
+                block_revenue_commission_bps: 10_000,
+                pending_delegator_rewards: 0,
+                bls_pubkey_compressed: None,
+                votes: VecDeque::new(),
+                root_slot: None,
+                authorized_voters: AuthorizedVoters::default(),
+                epoch_credits: Vec::new(),
+                last_timestamp: BlockTimestamp::default(),
+            }));
+            let mut ser_v4 = bincode::serialize(&vote_state_v4).unwrap();
+            let account_v4 = AccountInfo::new(
+                &key,
+                false,
+                false,
+                &mut lamports,
+                ser_v4.as_mut_slice(),
+                &owner,
+                false,
+                0,
+            );
+            assert_eq!(
+                VoteStateVersions::deserialize_commission(&account_v4).unwrap(),
+                expected_commission,
+                "{inflation_rewards_commission_bps} bps"
+            );
+        }
     }
 
     #[test]

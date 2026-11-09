@@ -543,6 +543,14 @@ fn formatted_entry(entry: ValidatorHistoryEntry, print_json: bool) -> String {
             "Is Jito BAM Connected: {}",
             format_option(entry_output.is_bam_connected)
         ));
+        field_descriptions.push(format!(
+            "Reward Lamports: {}",
+            format_option(entry_output.reward_lamports)
+        ));
+        field_descriptions.push(format!(
+            "Epoch Stake Lamports: {}",
+            format_option(entry_output.epoch_stake_lamports)
+        ));
 
         field_descriptions.join(" | ")
     }
@@ -862,22 +870,49 @@ fn command_cluster_history(args: ClusterHistoryStatus, client: RpcClient, progra
     let cluster_history_account = client
         .get_account(&cluster_history_pda)
         .expect("Failed to get cluster history account");
-    let cluster_history =
+    let mut cluster_history =
         ClusterHistory::try_deserialize(&mut cluster_history_account.data.as_slice())
             .expect("Failed to deserialize cluster history account");
 
     let mut results = Vec::with_capacity(cluster_history.history.arr.len());
+    let default_entry = ClusterHistoryEntry::default();
+
+    cluster_history
+        .history
+        .arr
+        .sort_by(|a, b| a.epoch.cmp(&b.epoch));
 
     for entry in cluster_history.history.arr.iter() {
+        let total_epoch_stake_lamports = (entry.total_epoch_stake_lamports
+            != default_entry.total_epoch_stake_lamports)
+            .then_some(entry.total_epoch_stake_lamports);
+        let total_inflation_rewards = (entry.total_inflation_rewards
+            != default_entry.total_inflation_rewards)
+            .then_some(entry.total_inflation_rewards);
+        let distributed_inflation_rewards = (entry.distributed_inflation_rewards
+            != default_entry.distributed_inflation_rewards)
+            .then_some(entry.distributed_inflation_rewards);
+        let is_alpenglow =
+            (entry.is_alpenglow != default_entry.is_alpenglow).then_some(entry.is_alpenglow);
+
         if args.print_json {
             results.push(serde_json::json!({
                 "epoch": entry.epoch,
                 "total_blocks": entry.total_blocks,
+                "total_epoch_stake_lamports": total_epoch_stake_lamports,
+                "total_inflation_rewards": total_inflation_rewards,
+                "distributed_inflation_rewards": distributed_inflation_rewards,
+                "is_alpenglow": is_alpenglow,
             }));
         } else {
             println!(
-                "Epoch: {} | Total Blocks: {}",
-                entry.epoch, entry.total_blocks
+                "Epoch: {} | Total Blocks: {} | Total Epoch Stake Lamports: {} | Total Inflation Rewards: {} | Distributed Inflation Rewards: {} | Is Alpenglow: {}",
+                entry.epoch,
+                entry.total_blocks,
+                format_option(total_epoch_stake_lamports.map(|value| value.to_string())),
+                format_option(total_inflation_rewards.map(|value| value.to_string())),
+                format_option(distributed_inflation_rewards.map(|value| value.to_string())),
+                format_option(is_alpenglow.map(|value| value.to_string())),
             );
         }
 

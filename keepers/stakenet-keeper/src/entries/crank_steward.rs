@@ -18,7 +18,11 @@ use solana_sdk::{
     signature::Keypair,
     signer::Signer,
     stake,
-    stake::{instruction::deactivate_delinquent_stake, state::StakeStateV2},
+    stake::{
+        instruction::deactivate_delinquent_stake,
+        state::StakeStateV2,
+        tools::{acceptable_reference_epoch_credits, eligible_for_deactivate_delinquent},
+    },
     system_program,
 };
 use solana_vote_interface::state::VoteStateV4;
@@ -129,10 +133,7 @@ pub fn _get_update_stake_pool_ixs(
             }
         };
 
-        match vote_account.epoch_credits.iter().last() {
-            Some(entry) => entry.0 == epoch || entry.0 == epoch - 1,
-            None => false,
-        }
+        acceptable_reference_epoch_credits(&vote_account.epoch_credits, epoch)
     });
 
     for validator_info in validator_list.validators.iter() {
@@ -185,30 +186,20 @@ pub fn _get_update_stake_pool_ixs(
                         }
                     };
 
-                if vote_account.epoch_credits.iter().last().is_none() {
-                    error!(
-                        "Vote account has no epoch credits entries vote_account={}",
-                        validator_info.vote_account_address
-                    );
-                    false
-                } else {
-                    let latest_epoch = vote_account.epoch_credits.iter().last().unwrap().0;
-
-                    match stake_account {
-                        StakeStateV2::Stake(_meta, stake, _stake_flags) => {
-                            if stake.delegation.deactivation_epoch != u64::MAX {
-                                false
-                            } else {
-                                latest_epoch <= epoch - 5
-                            }
-                        }
-                        _ => {
-                            error!(
-                                "Stake account is not in Stake state vote_account={}",
-                                validator_info.vote_account_address
-                            );
+                match stake_account {
+                    StakeStateV2::Stake(_meta, stake, _stake_flags) => {
+                        if stake.delegation.deactivation_epoch != u64::MAX {
                             false
+                        } else {
+                            eligible_for_deactivate_delinquent(&vote_account.epoch_credits, epoch)
                         }
+                    }
+                    _ => {
+                        error!(
+                            "Stake account is not in Stake state vote_account={}",
+                            validator_info.vote_account_address
+                        );
+                        false
                     }
                 }
             }
@@ -227,6 +218,12 @@ pub fn _get_update_stake_pool_ixs(
 
             deactivate_delinquent_instructions.push(ix);
         }
+    }
+
+    if reference_vote_account.is_none() {
+        info!(
+            "No vote account satisfies the stake program's reference requirements, skipping delinquent deactivation epoch={epoch}"
+        );
     }
 
     let final_instructions = vec![
